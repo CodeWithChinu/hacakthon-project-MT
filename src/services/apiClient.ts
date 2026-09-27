@@ -26,28 +26,32 @@ class ApiClient {
   }
 
   private headers(): HeadersInit {
+    const role = this.getRole();
     return {
       'Content-Type': 'application/json',
-      'x-app-role': this.getRole(),
+      'x-app-role': role,
+      'role': role,
     };
   }
 
   async getRoleStatus() {
-    const res = await fetch('/api/role-status', { headers: this.headers() });
+    const res = await fetch(`/api/role-status?role=${this.getRole()}`, { headers: this.headers() });
     return res.json();
   }
 
   async getInstruments(): Promise<Instrument[]> {
-    const res = await fetch('/api/instruments', { headers: this.headers() });
+    const res = await fetch(`/api/instruments?role=${this.getRole()}`, { headers: this.headers() });
     if (!res.ok) throw new Error('Failed to fetch instruments');
     return res.json();
   }
 
   async createInstrument(inst: Partial<Instrument>): Promise<Instrument> {
-    const res = await fetch('/api/instruments', {
+    const role = this.getRole();
+    const payload = { ...inst, _role: role, role };
+    const res = await fetch(`/api/instruments?role=${role}`, {
       method: 'POST',
       headers: this.headers(),
-      body: JSON.stringify(inst),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to create instrument' }));
@@ -57,23 +61,25 @@ class ApiClient {
   }
 
   async getReports(params?: { search?: string; status?: string; accuracyClass?: string }): Promise<EvaluationReport[]> {
-    const qs = new URLSearchParams(params as any).toString();
+    const qs = new URLSearchParams({ ...(params as any), role: this.getRole() }).toString();
     const res = await fetch(`/api/reports?${qs}`, { headers: this.headers() });
     if (!res.ok) throw new Error('Failed to fetch reports');
     return res.json();
   }
 
   async getReport(id: string): Promise<EvaluationReport> {
-    const res = await fetch(`/api/reports/${id}`, { headers: this.headers() });
+    const res = await fetch(`/api/reports/${id}?role=${this.getRole()}`, { headers: this.headers() });
     if (!res.ok) throw new Error('Failed to fetch report');
     return res.json();
   }
 
-  async createReport(data: { instrumentId: string; ruleVersionId: string; observerName: string }): Promise<EvaluationReport> {
-    const res = await fetch('/api/reports', {
+  async createReport(data: { instrumentId: string; ruleVersionId: string; observerName: string; instrument?: Instrument }): Promise<EvaluationReport> {
+    const role = this.getRole();
+    const payload = { ...data, _role: role, role };
+    const res = await fetch(`/api/reports?role=${role}`, {
       method: 'POST',
       headers: this.headers(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to create report' }));
@@ -83,10 +89,12 @@ class ApiClient {
   }
 
   async updateReport(id: string, updates: Partial<EvaluationReport>): Promise<EvaluationReport> {
-    const res = await fetch(`/api/reports/${id}`, {
+    const role = this.getRole();
+    const payload = { ...updates, _role: role, role };
+    const res = await fetch(`/api/reports/${id}?role=${role}`, {
       method: 'PUT',
       headers: this.headers(),
-      body: JSON.stringify(updates),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to update report' }));
@@ -96,9 +104,11 @@ class ApiClient {
   }
 
   async runCalculations(id: string): Promise<{ report: EvaluationReport; logs: string[] }> {
-    const res = await fetch(`/api/reports/${id}/calculate`, {
+    const role = this.getRole();
+    const res = await fetch(`/api/reports/${id}/calculate?role=${role}`, {
       method: 'POST',
       headers: this.headers(),
+      body: JSON.stringify({ _role: role, role }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Calculation engine failed' }));

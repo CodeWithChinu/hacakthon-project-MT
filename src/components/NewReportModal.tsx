@@ -3,43 +3,69 @@
  * Available to ADMIN role.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Instrument, RegulatoryRuleVersion } from '../types/metrology';
 import { FilePlus, X, Scale } from 'lucide-react';
 
 interface Props {
   instruments: Instrument[];
   rules: RegulatoryRuleVersion[];
+  initialInstrumentId?: string;
   onClose: () => void;
-  onCreate: (data: { instrumentId: string; ruleVersionId: string; observerName: string }) => Promise<void>;
+  onCreate: (data: { instrumentId: string; ruleVersionId: string; observerName: string; instrument?: Instrument }) => Promise<void>;
 }
 
 export const NewReportModal: React.FC<Props> = ({
   instruments,
   rules,
+  initialInstrumentId,
   onClose,
   onCreate,
 }) => {
-  const [selectedInstId, setSelectedInstId] = useState(instruments[0]?.id || '');
+  const [selectedInstId, setSelectedInstId] = useState(
+    initialInstrumentId || instruments[0]?.id || ''
+  );
   const [selectedRuleId, setSelectedRuleId] = useState(rules[0]?.id || '');
   const [observerName, setObserverName] = useState('Laboratory Testing Officer');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Synchronize selection if instruments or initialInstrumentId changes
+  useEffect(() => {
+    if (initialInstrumentId && instruments.some((i) => i.id === initialInstrumentId)) {
+      setSelectedInstId(initialInstrumentId);
+    } else if (!selectedInstId && instruments.length > 0) {
+      setSelectedInstId(instruments[0].id);
+    }
+  }, [instruments, initialInstrumentId]);
+
+  useEffect(() => {
+    if (!selectedRuleId && rules.length > 0) {
+      setSelectedRuleId(rules[0].id);
+    }
+  }, [rules]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedInstId) {
-      setErrorMsg('Please select a registered weighing instrument.');
+
+    // Fallback to first available instrument if not explicitly selected
+    const instId = selectedInstId || instruments[0]?.id;
+    if (!instId) {
+      setErrorMsg('No weighing instrument available. Please register an instrument first.');
       return;
     }
+
+    const targetInst = instruments.find((i) => i.id === instId) || instruments[0];
+    const targetRuleId = selectedRuleId || rules[0]?.id || 'rule-oiml-r76-2006';
 
     try {
       setLoading(true);
       setErrorMsg('');
       await onCreate({
-        instrumentId: selectedInstId,
-        ruleVersionId: selectedRuleId,
-        observerName,
+        instrumentId: targetInst.id,
+        instrument: targetInst,
+        ruleVersionId: targetRuleId,
+        observerName: observerName.trim() || 'Laboratory Testing Officer',
       });
       onClose();
     } catch (err: any) {

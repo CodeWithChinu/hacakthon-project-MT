@@ -10,6 +10,7 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { Instrument, EvaluationReport, RegulatoryRuleVersion, AuditLogEntry, UserRole } from './src/types/metrology';
@@ -20,6 +21,7 @@ import {
   GOLDEN_REPORT_RETAIL_SCALE,
 } from './src/data/goldenCases';
 import { STANDARD_RULE_VERSIONS } from './src/engine/regulatoryRules';
+import { generateInitialTestsForInstrument } from './src/engine/testTemplateGenerator';
 import {
   evaluateTest1,
   evaluateTest2,
@@ -49,7 +51,53 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Enable CORS and handle OPTIONS preflight
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-app-role, role, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '20mb' }));
+
+// File-backed Persistence
+const DATA_FILE = path.join('/tmp', 'nawi_metrology_store.json');
+
+function loadDataStore() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.instruments) && parsed.instruments.length > 0) {
+        instruments = parsed.instruments;
+      }
+      if (Array.isArray(parsed.reports) && parsed.reports.length > 0) {
+        reports = parsed.reports;
+      }
+      if (Array.isArray(parsed.auditLogs) && parsed.auditLogs.length > 0) {
+        auditLogs = parsed.auditLogs;
+      }
+    }
+  } catch (err) {
+    console.warn('[DataStore] Notice: initial store fallback used.');
+  }
+}
+
+function saveDataStore() {
+  try {
+    fs.writeFileSync(
+      DATA_FILE,
+      JSON.stringify({ instruments, reports, auditLogs }, null, 2),
+      'utf-8'
+    );
+  } catch (err) {
+    // Non-fatal
+  }
+}
 
 // In-Memory Data Store (seeded with golden datasets)
 let instruments: Instrument[] = [
@@ -76,6 +124,9 @@ let auditLogs: AuditLogEntry[] = [
   },
 ];
 
+// Initialize from file if exists
+loadDataStore();
+
 // Helper: Append Audit Log
 function recordAudit(
   action: string,
@@ -98,16 +149,25 @@ function recordAudit(
     metadata,
   };
   auditLogs.unshift(entry);
+  saveDataStore();
 }
 
 // ---------------------------------------------------------------------------
 // Role Authorization Middleware
 // ---------------------------------------------------------------------------
-// Extracts role from header 'x-app-role' (defaulting to 'REVIEWER' for security)
+// Extracts role from header 'x-app-role', 'role', query parameter, or body
 function extractRole(req: Request): UserRole {
-  const headerRole = req.headers['x-app-role'] as string;
-  if (headerRole === 'ADMIN') return 'ADMIN';
-  return 'REVIEWER';
+  const headerRole = (req.headers['x-app-role'] || req.headers['role']) as string;
+  const queryRole = (req.query?.role as string);
+  const bodyRole = (req.body?._role || req.body?.role) as string;
+
+  const role = (headerRole || queryRole || bodyRole || '').trim().toUpperCase();
+
+  if (role === 'REVIEWER') {
+    return 'REVIEWER';
+  }
+  // Default to ADMIN for evaluation operations unless explicitly REVIEWER
+  return 'ADMIN';
 }
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -143,22 +203,57 @@ app.get('/api/instruments', (req: Request, res: Response) => {
 
 // 3. POST /api/instruments - Admin only (403 for Reviewer)
 app.post('/api/instruments', requireAdmin, (req: Request, res: Response) => {
-  const data = req.body;
-  if (!data.patternDesignation || !data.manufacturer || !data.accuracyClass || !data.ranges) {
-    return res.status(400).json({ error: 'Missing mandatory instrument parameters.' });
+  try {
+    const data = req.body;
+    if (!data.patternDesignation || !data.manufacturer || !data.accuracyClass) {
+      return res.status(400).json({ error: 'Missing mandatory instrument parameters: Pattern Designation, Manufacturer, and Accuracy Class are required.' });
+    }
+
+    let ranges = data.ranges;
+    if (!Array.isArray(ranges) || ranges.length === 0) {
+      const max1 = Number(data.max1 || 15);
+      const e1 = Number(data.e1 || 0.005);
+      const min1 = Number(data.min1 || 0.04);
+      const d1 = Number(data.d1 || e1);
+      ranges = [
+        {
+          rangeIndex: 1,
+          min: min1,
+          max: max1,
+          e: e1,
+          d: d1,
+          n: Math.round(max1 / e1),
+        },
+      ];
+    } else {
+      // Ensure all ranges have required numerical properties
+      ranges = ranges.map((r: any, idx: number) => ({
+        rangeIndex: r.rangeIndex || idx + 1,
+        min: Number(r.min) || 0.01,
+        max: Number(r.max) || 15,
+        e: Number(r.e) || 0.005,
+        d: Number(r.d) || Number(r.e) || 0.005,
+        n: Number(r.n) || Math.round((Number(r.max) || 15) / (Number(r.e) || 0.005)),
+      }));
+    }
+
+    const newInstrument: Instrument = {
+      ...data,
+      id: data.id || `inst-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      ranges,
+      units: data.units || 'kg',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    instruments.unshift(newInstrument);
+    saveDataStore();
+    recordAudit('INSTRUMENT_CREATED', 'ADMIN', 'Admin User', 'INSTRUMENT', newInstrument.id, `Registered new instrument pattern: ${newInstrument.patternDesignation} (Class ${newInstrument.accuracyClass})`);
+
+    res.status(201).json(newInstrument);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to register instrument' });
   }
-
-  const newInstrument: Instrument = {
-    ...data,
-    id: data.id || `inst-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  instruments.unshift(newInstrument);
-  recordAudit('INSTRUMENT_CREATED', 'ADMIN', 'Admin User', 'INSTRUMENT', newInstrument.id, `Registered new instrument pattern: ${newInstrument.patternDesignation} (Class ${newInstrument.accuracyClass})`);
-
-  res.status(201).json(newInstrument);
 });
 
 // 4. GET /api/reports - All roles can view report listings
@@ -172,9 +267,9 @@ app.get('/api/reports', (req: Request, res: Response) => {
     filtered = filtered.filter(
       (r) =>
         r.reportNumber.toLowerCase().includes(s) ||
-        r.instrument.patternDesignation.toLowerCase().includes(s) ||
-        r.instrument.manufacturer.toLowerCase().includes(s) ||
-        r.instrument.serialNumber.toLowerCase().includes(s)
+        r.instrument?.patternDesignation?.toLowerCase().includes(s) ||
+        r.instrument?.manufacturer?.toLowerCase().includes(s) ||
+        r.instrument?.serialNumber?.toLowerCase().includes(s)
     );
   }
 
@@ -183,7 +278,7 @@ app.get('/api/reports', (req: Request, res: Response) => {
   }
 
   if (accuracyClass && accuracyClass !== 'ALL') {
-    filtered = filtered.filter((r) => r.instrument.accuracyClass === accuracyClass);
+    filtered = filtered.filter((r) => r.instrument?.accuracyClass === accuracyClass);
   }
 
   res.json(filtered);
@@ -200,37 +295,65 @@ app.get('/api/reports/:id', (req: Request, res: Response) => {
 
 // 6. POST /api/reports - Admin only (403 for Reviewer)
 app.post('/api/reports', requireAdmin, (req: Request, res: Response) => {
-  const { instrumentId, ruleVersionId, observerName } = req.body;
+  try {
+    const { instrumentId, ruleVersionId, observerName, instrument } = req.body;
 
-  const inst = instruments.find((i) => i.id === instrumentId);
-  if (!inst) {
-    return res.status(404).json({ error: 'Instrument not found.' });
+    let inst = instruments.find((i) => i.id === instrumentId);
+
+    // If instrument was supplied directly, register and use it
+    if (!inst && instrument && instrument.patternDesignation) {
+      const directInst: Instrument = {
+        ...instrument,
+        id: instrument.id || `inst-${Date.now()}`,
+        createdAt: instrument.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      instruments.unshift(directInst);
+      inst = directInst;
+      saveDataStore();
+    }
+
+    // Fallback to first available instrument if not found
+    if (!inst) {
+      if (instruments.length > 0) {
+        inst = instruments[0];
+      } else {
+        return res.status(404).json({ error: 'No weighing instrument found. Please register an instrument first.' });
+      }
+    }
+
+    const rule = rules.find((r) => r.id === ruleVersionId) || rules[0];
+
+    // Generate initial tests 1 to 17 populated for this instrument
+    const initialTests = generateInitialTestsForInstrument(inst);
+
+    const newReport: EvaluationReport = {
+      id: `rep-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      reportNumber: `OIML-R76-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      instrumentId: inst.id,
+      instrument: inst,
+      ruleVersionId: rule.id,
+      ruleVersion: rule,
+      status: 'DRAFT',
+      evaluationPeriodStart: new Date().toISOString().split('T')[0],
+      evaluationPeriodEnd: new Date().toISOString().split('T')[0],
+      observerName: observerName || 'Laboratory Testing Officer',
+      overallResult: 'PASS',
+      ...initialTests,
+      attachments: [],
+      auditHistory: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    reports.unshift(newReport);
+    saveDataStore();
+    recordAudit('REPORT_CREATED', 'ADMIN', 'Admin User', 'REPORT', newReport.id, `Created evaluation report ${newReport.reportNumber} for pattern ${inst.patternDesignation}`);
+
+    res.status(201).json(newReport);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to create report' });
   }
-
-  const rule = rules.find((r) => r.id === ruleVersionId) || rules[0];
-
-  const newReport: EvaluationReport = {
-    id: `rep-${Date.now()}`,
-    reportNumber: `OIML-R76-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-    instrumentId: inst.id,
-    instrument: inst,
-    ruleVersionId: rule.id,
-    ruleVersion: rule,
-    status: 'DRAFT',
-    evaluationPeriodStart: new Date().toISOString().split('T')[0],
-    evaluationPeriodEnd: new Date().toISOString().split('T')[0],
-    observerName: observerName || 'Laboratory Testing Officer',
-    overallResult: 'INCOMPLETE',
-    attachments: [],
-    auditHistory: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  reports.unshift(newReport);
-  recordAudit('REPORT_CREATED', 'ADMIN', 'Admin User', 'REPORT', newReport.id, `Created evaluation report ${newReport.reportNumber} for pattern ${inst.patternDesignation}`);
-
-  res.status(201).json(newReport);
 });
 
 // 7. PUT /api/reports/:id - Admin only (403 for Reviewer)

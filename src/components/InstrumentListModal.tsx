@@ -20,7 +20,7 @@ export const InstrumentListModal: React.FC<Props> = ({
   onRegisterInstrument,
   onSelectInstrument,
 }) => {
-  const isAdmin = role === 'ADMIN';
+  const isAdmin = role?.toUpperCase() === 'ADMIN';
   const [searchTerm, setSearchTerm] = useState('');
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -66,7 +66,15 @@ export const InstrumentListModal: React.FC<Props> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
-      setErrorMsg('Unauthorized: Only Admin role may register new instruments.');
+      setErrorMsg('Unauthorized: Only Admin role may register new instruments. Please switch to Admin access.');
+      return;
+    }
+
+    const patDes = formData.patternDesignation.trim();
+    const mfr = formData.manufacturer.trim();
+
+    if (!patDes || !mfr) {
+      setErrorMsg('Pattern Designation and Manufacturer are mandatory fields.');
       return;
     }
 
@@ -74,53 +82,61 @@ export const InstrumentListModal: React.FC<Props> = ({
       setSubmitting(true);
       setErrorMsg('');
 
+      const min1 = Math.max(0.000001, Number(formData.min1) || 0.04);
+      const max1 = Math.max(min1, Number(formData.max1) || 15);
+      const e1 = Math.max(0.000001, Number(formData.e1) || 0.005);
+      const d1 = Math.max(0.000001, Number(formData.d1) || e1);
+
       const ranges = [
         {
           rangeIndex: 1,
-          min: Number(formData.min1),
-          max: Number(formData.max1),
-          e: Number(formData.e1),
-          d: Number(formData.d1),
-          n: Math.round(Number(formData.max1) / Number(formData.e1)),
+          min: min1,
+          max: max1,
+          e: e1,
+          d: d1,
+          n: Math.round(max1 / e1),
         },
       ];
 
       if (formData.rangeType !== 'SINGLE_RANGE') {
+        const max2 = Math.max(max1, Number(formData.max2) || max1 * 2);
+        const e2 = Math.max(e1, Number(formData.e2) || e1 * 2);
+        const d2 = Math.max(d1, Number(formData.d2) || e2);
         ranges.push({
           rangeIndex: 2,
-          min: Number(formData.max1),
-          max: Number(formData.max2),
-          e: Number(formData.e2),
-          d: Number(formData.d2),
-          n: Math.round(Number(formData.max2) / Number(formData.e2)),
+          min: max1,
+          max: max2,
+          e: e2,
+          d: d2,
+          n: Math.round(max2 / e2),
         });
       }
 
       await onRegisterInstrument({
-        patternDesignation: formData.patternDesignation,
-        applicationNumber: formData.applicationNumber,
-        manufacturer: formData.manufacturer,
-        applicant: formData.applicant || formData.manufacturer,
+        patternDesignation: patDes,
+        applicationNumber: formData.applicationNumber.trim() || `APP/${new Date().getFullYear()}/NAWI/${Math.floor(100 + Math.random() * 900)}`,
+        manufacturer: mfr,
+        applicant: (formData.applicant || mfr).trim(),
         instrumentCategory: formData.instrumentCategory,
         accuracyClass: formData.accuracyClass,
         rangeType: formData.rangeType,
         indicatingType: 'SELF_INDICATING',
         instrumentType: 'COMPLETE',
-        units: formData.units,
+        units: formData.units || 'kg',
         ranges,
         powerCategory: formData.powerCategory,
-        nominalVoltage: Number(formData.nominalVoltage),
-        temperatureMin: Number(formData.temperatureMin),
-        temperatureMax: Number(formData.temperatureMax),
+        nominalVoltage: Number(formData.nominalVoltage) || 230,
+        temperatureMin: Number(formData.temperatureMin) ?? -10,
+        temperatureMax: Number(formData.temperatureMax) ?? 40,
         initialZeroSettingRangePercent: 4.0,
-        tareMax: Number(formData.tareMax),
+        tareMax: Number(formData.tareMax) || max1,
         tareType: formData.tareType,
         hasLevelIndicator: formData.hasLevelIndicator,
         isDirectSales: formData.isDirectSales,
         hasPriceComputing: formData.hasPriceComputing,
         isElectronic: formData.isElectronic,
         hasSoftware: true,
-        serialNumber: formData.serialNumber,
+        serialNumber: formData.serialNumber.trim() || `SN-${Date.now().toString().slice(-6)}`,
         identificationNumber: `EUT-${Math.floor(10 + Math.random() * 90)}`,
       });
 
