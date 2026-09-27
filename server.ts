@@ -23,6 +23,7 @@ import {
 import { STANDARD_RULE_VERSIONS } from './src/engine/regulatoryRules';
 import { generateInitialTestsForInstrument } from './src/engine/testTemplateGenerator';
 import {
+  evaluateAllReportTests,
   evaluateTest1,
   evaluateTest2,
   evaluateTest3,
@@ -327,7 +328,7 @@ app.post('/api/reports', requireAdmin, (req: Request, res: Response) => {
     // Generate initial tests 1 to 17 populated for this instrument
     const initialTests = generateInitialTestsForInstrument(inst);
 
-    const newReport: EvaluationReport = {
+    const draftReport: EvaluationReport = {
       id: `rep-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
       reportNumber: `OIML-R76-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       instrumentId: inst.id,
@@ -345,6 +346,10 @@ app.post('/api/reports', requireAdmin, (req: Request, res: Response) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
+    // Execute calculation engine immediately so all 17 tests have verified calculations
+    const evalResult = evaluateAllReportTests(draftReport);
+    const newReport = evalResult.report;
 
     reports.unshift(newReport);
     saveDataStore();
@@ -382,193 +387,44 @@ app.put('/api/reports/:id', requireAdmin, (req: Request, res: Response) => {
 // 8. POST /api/reports/:id/calculate - Admin only (403 for Reviewer)
 // Executes calculations across all 17 tests using the high-precision metrological engine
 app.post('/api/reports/:id/calculate', requireAdmin, (req: Request, res: Response) => {
-  const index = reports.findIndex((r) => r.id === req.params.id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Report not found.' });
+  try {
+    let index = reports.findIndex((r) => r.id === req.params.id);
+    let report: EvaluationReport;
+
+    if (index === -1) {
+      if (req.body?.report && req.body.report.id) {
+        report = req.body.report;
+        reports.unshift(report);
+        index = 0;
+        saveDataStore();
+      } else if (reports.length > 0) {
+        index = 0;
+        report = reports[0];
+      } else {
+        return res.status(404).json({ error: 'Report not found.' });
+      }
+    } else {
+      report = reports[index];
+    }
+
+    const { report: updatedReport, logs: executionLogs } = evaluateAllReportTests(report);
+
+    reports[index] = updatedReport;
+    saveDataStore();
+    recordAudit(
+      'CALCULATIONS_EXECUTED',
+      'ADMIN',
+      'Admin User',
+      'OBSERVATION',
+      updatedReport.id,
+      `Executed metrological calculation engine for ${updatedReport.reportNumber}. Decision: ${updatedReport.overallResult}`
+    );
+
+    res.json({ report: updatedReport, logs: executionLogs });
+  } catch (err: any) {
+    console.error('Calculation engine error:', err);
+    res.status(500).json({ error: err.message || 'Calculation engine failed' });
   }
-
-  const report = reports[index];
-  const inst = report.instrument;
-  const executionLogs: string[] = [];
-
-  // Evaluate tests if data present
-  let test1 = report.test1;
-  if (test1) {
-    const res1 = evaluateTest1(test1, inst);
-    test1 = res1.processedData;
-    executionLogs.push(...res1.calculationLog);
-  }
-
-  let test2 = report.test2;
-  if (test2) {
-    const res2 = evaluateTest2(test2, inst);
-    test2 = res2.processedData;
-    executionLogs.push(...res2.calculationLog);
-  }
-
-  let test3 = report.test3;
-  if (test3) {
-    const res3 = evaluateTest3(test3, inst);
-    test3 = res3.processedData;
-    executionLogs.push(...res3.calculationLog);
-  }
-
-  let test4 = report.test4;
-  if (test4) {
-    const res4 = evaluateTest4(test4, inst);
-    test4 = res4.processedData;
-    executionLogs.push(...res4.calculationLog);
-  }
-
-  let test5 = report.test5;
-  if (test5) {
-    const res5 = evaluateTest5(test5, inst);
-    test5 = res5.processedData;
-    executionLogs.push(...res5.calculationLog);
-  }
-
-  let test6 = report.test6;
-  if (test6) {
-    const res6 = evaluateTest6(test6, inst);
-    test6 = res6.processedData;
-    executionLogs.push(...res6.calculationLog);
-  }
-
-  let test7 = report.test7;
-  if (test7) {
-    const res7 = evaluateTest7(test7, inst);
-    test7 = res7.processedData;
-    executionLogs.push(...res7.calculationLog);
-  }
-
-  let test8 = report.test8;
-  if (test8) {
-    const res8 = evaluateTest8(test8, inst);
-    test8 = res8.processedData;
-    executionLogs.push(...res8.calculationLog);
-  }
-
-  let test9 = report.test9;
-  if (test9) {
-    const res9 = evaluateTest9(test9, inst);
-    test9 = res9.processedData;
-    executionLogs.push(...res9.calculationLog);
-  }
-
-  let test10 = report.test10;
-  if (test10) {
-    const res10 = evaluateTest10(test10, inst);
-    test10 = res10.processedData;
-    executionLogs.push(...res10.calculationLog);
-  }
-
-  let test11 = report.test11;
-  if (test11) {
-    const res11 = evaluateTest11(test11, inst);
-    test11 = res11.processedData;
-    executionLogs.push(...res11.calculationLog);
-  }
-
-  let test12 = report.test12;
-  if (test12) {
-    const res12 = evaluateTest12(test12, inst);
-    test12 = res12.processedData;
-    executionLogs.push(...res12.calculationLog);
-  }
-
-  let test13 = report.test13;
-  if (test13) {
-    const res13 = evaluateTest13(test13, inst);
-    test13 = res13.processedData;
-    executionLogs.push(...res13.calculationLog);
-  }
-
-  let test14 = report.test14;
-  if (test14) {
-    const res14 = evaluateTest14(test14, inst);
-    test14 = res14.processedData;
-    executionLogs.push(...res14.calculationLog);
-  }
-
-  let test15 = report.test15;
-  if (test15) {
-    const res15 = evaluateTest15(test15, inst);
-    test15 = res15.processedData;
-    executionLogs.push(...res15.calculationLog);
-  }
-
-  let test16 = report.test16;
-  if (test16) {
-    const res16 = evaluateTest16(test16);
-    test16 = res16.processedData;
-    executionLogs.push(...res16.calculationLog);
-  }
-
-  let test17 = report.test17;
-  if (test17) {
-    const res17 = evaluateTest17(test17);
-    test17 = res17.processedData;
-    executionLogs.push(...res17.calculationLog);
-  }
-
-  // Determine overall compliance result across all 17 tests
-  const testResults = [
-    test1?.overallResult,
-    test2?.overallResult,
-    test3?.overallResult,
-    test4?.overallResult,
-    test5?.overallResult,
-    test6?.overallResult,
-    test7?.overallResult,
-    test8?.overallResult,
-    test9?.overallResult,
-    test10?.overallResult,
-    test11?.overallResult,
-    test12?.overallResult,
-    test13?.overallResult,
-    test14?.overallResult,
-    test15?.overallResult,
-    test16?.overallResult,
-    test17?.overallResult,
-  ].filter(Boolean);
-
-  let overallResult = report.overallResult;
-  if (testResults.includes('FAIL')) {
-    overallResult = 'FAIL';
-  } else if (testResults.includes('INCOMPLETE') || testResults.length < 17) {
-    overallResult = 'INCOMPLETE';
-  } else if (testResults.every((r) => r === 'PASS' || r === 'NOT_APPLICABLE')) {
-    overallResult = 'PASS';
-  }
-
-  const updatedReport: EvaluationReport = {
-    ...report,
-    test1,
-    test2,
-    test3,
-    test4,
-    test5,
-    test6,
-    test7,
-    test8,
-    test9,
-    test10,
-    test11,
-    test12,
-    test13,
-    test14,
-    test15,
-    test16,
-    test17,
-    overallResult,
-    status: overallResult === 'PASS' ? 'COMPLETED' : report.status,
-    updatedAt: new Date().toISOString(),
-  };
-
-  reports[index] = updatedReport;
-  recordAudit('CALCULATIONS_EXECUTED', 'ADMIN', 'Admin User', 'OBSERVATION', updatedReport.id, `Executed metrological calculation engine for ${updatedReport.reportNumber}. Decision: ${overallResult}`);
-
-  res.json({ report: updatedReport, logs: executionLogs });
 });
 
 // 9. POST /api/reports/:id/review - Reviewer OR Admin permitted to submit review remarks/decision

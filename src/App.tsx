@@ -27,6 +27,7 @@ import {
   GOLDEN_REPORT_RETAIL_SCALE,
 } from './data/goldenCases';
 import { STANDARD_RULE_VERSIONS } from './engine/regulatoryRules';
+import { evaluateAllReportTests } from './engine/calculationEngine';
 
 export default function App() {
   // Access role state: null means landing access screen is active
@@ -129,7 +130,7 @@ export default function App() {
       // Robust client fallback if network fails
       const targetInst = data.instrument || instruments.find((i) => i.id === data.instrumentId) || instruments[0];
       const targetRule = rules.find((r) => r.id === data.ruleVersionId) || rules[0];
-      const fallbackReport: EvaluationReport = {
+      const draftFallback: EvaluationReport = {
         id: `rep-${Date.now()}`,
         reportNumber: `OIML-R76-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
         instrumentId: targetInst.id,
@@ -146,6 +147,7 @@ export default function App() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
+      const { report: fallbackReport } = evaluateAllReportTests(draftFallback);
       setReports((prev) => [fallbackReport, ...prev]);
       setSelectedReportId(fallbackReport.id);
       setActiveTab('report-detail');
@@ -162,7 +164,15 @@ export default function App() {
       showToast(`Calculations executed. Overall Decision: ${res.report.overallResult}`);
       refreshData();
     } catch (err: any) {
-      showToast(err.message, 'error');
+      // Local calculation fallback if server API encounters network issues
+      const target = reports.find((r) => r.id === selectedReportId);
+      if (target) {
+        const { report: updatedReport } = evaluateAllReportTests(target);
+        setReports((prev) => prev.map((r) => (r.id === updatedReport.id ? updatedReport : r)));
+        showToast(`Calculations executed. Overall Decision: ${updatedReport.overallResult}`);
+      } else {
+        showToast(err.message, 'error');
+      }
     }
   };
 

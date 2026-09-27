@@ -355,7 +355,7 @@ export function generateInitialTestsForInstrument(inst: Instrument): Partial<Eva
     remarks: 'Damp heat 85% RH chamber exposure shows no degradation beyond permissible limits (B.2.2).',
   };
 
-  // 14. Test 14: Span Stability (matching Test14Data)
+  // 14. Test 14: Span Stability (matching Test14Data with required 8 measurement points)
   const test14: Test14Data = {
     testLoad: Number((maxCap * 0.8).toFixed(3)),
     initialR1Threshold: Number((e1 * 0.1).toFixed(4)),
@@ -369,14 +369,81 @@ export function generateInitialTestsForInstrument(inst: Instrument): Partial<Eva
         conditionDescription: 'Initial reference measurement',
         readings: [
           { readingIndex: 1, i0: 0, deltaL0: Number((e1 * 0.5).toFixed(4)), e0: 0, iL: Number((maxCap * 0.8).toFixed(3)), deltaL: Number((e1 * 0.5).toFixed(4)), eL: 0, x: 0 },
+          { readingIndex: 2, i0: 0, deltaL0: Number((e1 * 0.5).toFixed(4)), e0: 0, iL: Number((maxCap * 0.8).toFixed(3)), deltaL: Number((e1 * 0.5).toFixed(4)), eL: 0, x: 0 },
         ],
         averageX: 0,
         r1: 0,
       },
       {
         measurementNumber: 2,
-        date: 'Day 28',
+        date: 'Day 2',
+        temperature: 20.6,
+        barometricPressure: 1013,
+        conditionDescription: 'Subsequent checkpoint Day 2',
+        readings: [
+          { readingIndex: 1, i0: 0, deltaL0: Number((e1 * 0.5).toFixed(4)), e0: 0, iL: Number((maxCap * 0.8).toFixed(3)), deltaL: Number((e1 * 0.5).toFixed(4)), eL: 0, x: 0 },
+        ],
+        averageX: 0,
+      },
+      {
+        measurementNumber: 3,
+        date: 'Day 4',
+        temperature: 20.8,
+        barometricPressure: 1011,
+        conditionDescription: 'Subsequent checkpoint Day 4',
+        readings: [
+          { readingIndex: 1, i0: 0, deltaL0: Number((e1 * 0.5).toFixed(4)), e0: 0, iL: Number((maxCap * 0.8).toFixed(3)), deltaL: Number((e1 * 0.5).toFixed(4)), eL: 0, x: 0 },
+        ],
+        averageX: 0,
+      },
+      {
+        measurementNumber: 4,
+        date: 'Day 7',
         temperature: 21.0,
+        barometricPressure: 1014,
+        conditionDescription: 'Subsequent checkpoint Day 7',
+        readings: [
+          { readingIndex: 1, i0: 0, deltaL0: Number((e1 * 0.5).toFixed(4)), e0: 0, iL: Number((maxCap * 0.8).toFixed(3)), deltaL: Number((e1 * 0.5).toFixed(4)), eL: 0, x: 0 },
+        ],
+        averageX: 0,
+      },
+      {
+        measurementNumber: 5,
+        date: 'Day 11',
+        temperature: 21.2,
+        barometricPressure: 1015,
+        conditionDescription: 'Subsequent checkpoint Day 11',
+        readings: [
+          { readingIndex: 1, i0: 0, deltaL0: Number((e1 * 0.5).toFixed(4)), e0: 0, iL: Number((maxCap * 0.8).toFixed(3)), deltaL: Number((e1 * 0.5).toFixed(4)), eL: 0, x: 0 },
+        ],
+        averageX: 0,
+      },
+      {
+        measurementNumber: 6,
+        date: 'Day 15',
+        temperature: 21.0,
+        barometricPressure: 1013,
+        conditionDescription: 'Subsequent checkpoint Day 15',
+        readings: [
+          { readingIndex: 1, i0: 0, deltaL0: Number((e1 * 0.5).toFixed(4)), e0: 0, iL: Number((maxCap * 0.8).toFixed(3)), deltaL: Number((e1 * 0.5).toFixed(4)), eL: 0, x: 0 },
+        ],
+        averageX: 0,
+      },
+      {
+        measurementNumber: 7,
+        date: 'Day 21',
+        temperature: 20.9,
+        barometricPressure: 1012,
+        conditionDescription: 'Subsequent checkpoint Day 21',
+        readings: [
+          { readingIndex: 1, i0: 0, deltaL0: Number((e1 * 0.5).toFixed(4)), e0: 0, iL: Number((maxCap * 0.8).toFixed(3)), deltaL: Number((e1 * 0.5).toFixed(4)), eL: 0, x: 0 },
+        ],
+        averageX: 0,
+      },
+      {
+        measurementNumber: 8,
+        date: 'Day 28',
+        temperature: 21.1,
         barometricPressure: 1014,
         conditionDescription: 'Final measurement after 28 days',
         readings: [

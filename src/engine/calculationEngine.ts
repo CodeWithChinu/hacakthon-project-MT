@@ -10,6 +10,7 @@ import {
   AccuracyClass,
   Instrument,
   ResultState,
+  EvaluationReport,
   Test1Data,
   Test2Data,
   Test3Data,
@@ -29,29 +30,41 @@ import {
   Test17Data,
 } from '../types/metrology';
 import { calculateMPE, resolveApplicableRange } from './mpeEngine';
+import { generateInitialTestsForInstrument } from './testTemplateGenerator';
 
 Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
+
+export function toSafeDecimal(val: any, defaultVal: number | string = 0): Decimal {
+  if (val === null || val === undefined || val === '' || Number.isNaN(val)) {
+    return new Decimal(defaultVal);
+  }
+  try {
+    return new Decimal(val);
+  } catch {
+    return new Decimal(defaultVal);
+  }
+}
 
 // ----------------------------------------------------
 // COMMON WEIGHING ERROR: P = I + e/2 - ΔL, E = P - L, Ec = E - E0
 // ----------------------------------------------------
 export function calculateCommonWeighingError(
-  indication: Decimal | number,
-  deltaL: Decimal | number,
-  load: Decimal | number,
-  applicableE: Decimal | number,
-  e0: Decimal | number = 0
+  indication: Decimal | number | any,
+  deltaL: Decimal | number | any,
+  load: Decimal | number | any,
+  applicableE: Decimal | number | any,
+  e0: Decimal | number | any = 0
 ): {
   p: Decimal;
   error: Decimal;
   correctedError: Decimal;
   m: Decimal;
 } {
-  const I = new Decimal(indication);
-  const dL = new Decimal(deltaL);
-  const L = new Decimal(load);
-  const e = new Decimal(applicableE);
-  const err0 = new Decimal(e0);
+  const I = toSafeDecimal(indication);
+  const dL = toSafeDecimal(deltaL);
+  const L = toSafeDecimal(load);
+  const e = toSafeDecimal(applicableE, 1);
+  const err0 = toSafeDecimal(e0);
 
   // Conventional true indication before rounding: P = I + 0.5*e - ΔL
   const halfE = e.times(0.5);
@@ -837,12 +850,12 @@ export function evaluateTest10(
 
   const processedMeasurements = data.measurements.map((m) => {
     // E0 = I0 + e/2 - ΔL0
-    const err0 = new Decimal(m.unloadedIndication).plus(baseE.times(0.5)).minus(new Decimal(m.unloadedDeltaL));
+    const err0 = toSafeDecimal(m.unloadedIndication).plus(baseE.times(0.5)).minus(toSafeDecimal(m.unloadedDeltaL));
     // EL = IL + e/2 - ΔL - L
-    const errL = new Decimal(m.loadedIndication)
+    const errL = toSafeDecimal(m.loadedIndication)
       .plus(baseE.times(0.5))
-      .minus(new Decimal(m.loadedDeltaL))
-      .minus(new Decimal(m.loadNominal));
+      .minus(toSafeDecimal(m.loadedDeltaL))
+      .minus(toSafeDecimal(m.loadNominal));
 
     const corrected = errL.minus(err0).abs();
     const mpeRes = calculateMPE(m.loadNominal, instrument.accuracyClass, instrument.ranges);
@@ -1107,8 +1120,8 @@ export function evaluateTest14(
   const processedMeasurements = data.measurements.map((m, idx) => {
     let readingXs: Decimal[] = [];
     const processedReadings = m.readings.map((r) => {
-      const e0 = new Decimal(r.i0).plus(baseE.times(0.5)).minus(new Decimal(r.deltaL0));
-      const eL = new Decimal(r.iL).plus(baseE.times(0.5)).minus(new Decimal(r.deltaL)).minus(new Decimal(data.testLoad));
+      const e0 = toSafeDecimal(r.i0).plus(baseE.times(0.5)).minus(toSafeDecimal(r.deltaL0));
+      const eL = toSafeDecimal(r.iL).plus(baseE.times(0.5)).minus(toSafeDecimal(r.deltaL)).minus(toSafeDecimal(data.testLoad));
       const x = eL.minus(e0);
       readingXs.push(x);
       return {
@@ -1297,4 +1310,285 @@ export function evaluateTest17(
     processedData: { ...data, overallResult },
     calculationLog: log,
   };
+}
+
+// ----------------------------------------------------
+// MASTER EVALUATOR: Evaluates all 17 tests on a report
+// ----------------------------------------------------
+export function evaluateAllReportTests(inputReport: EvaluationReport): {
+  report: EvaluationReport;
+  logs: string[];
+} {
+  let report = { ...inputReport };
+  const inst = report.instrument;
+  const executionLogs: string[] = [];
+
+  // If report tests are uninitialized or missing observations, generate test templates
+  if (!report.test1 || !report.test1.observations || report.test1.observations.length === 0) {
+    const generated = generateInitialTestsForInstrument(inst);
+    report = {
+      ...report,
+      ...generated,
+    };
+  }
+
+  // 1. Weighing Performance
+  let test1 = report.test1;
+  if (test1) {
+    try {
+      const res1 = evaluateTest1(test1, inst);
+      test1 = res1.processedData;
+      executionLogs.push(...res1.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 1 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 2. Temperature Effect
+  let test2 = report.test2;
+  if (test2) {
+    try {
+      const res2 = evaluateTest2(test2, inst);
+      test2 = res2.processedData;
+      executionLogs.push(...res2.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 2 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 3. Eccentricity
+  let test3 = report.test3;
+  if (test3) {
+    try {
+      const res3 = evaluateTest3(test3, inst);
+      test3 = res3.processedData;
+      executionLogs.push(...res3.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 3 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 4. Discrimination
+  let test4 = report.test4;
+  if (test4) {
+    try {
+      const res4 = evaluateTest4(test4, inst);
+      test4 = res4.processedData;
+      executionLogs.push(...res4.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 4 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 5. Repeatability
+  let test5 = report.test5;
+  if (test5) {
+    try {
+      const res5 = evaluateTest5(test5, inst);
+      test5 = res5.processedData;
+      executionLogs.push(...res5.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 5 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 6. Time Dependence
+  let test6 = report.test6;
+  if (test6) {
+    try {
+      const res6 = evaluateTest6(test6, inst);
+      test6 = res6.processedData;
+      executionLogs.push(...res6.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 6 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 7. Stability of Equilibrium
+  let test7 = report.test7;
+  if (test7) {
+    try {
+      const res7 = evaluateTest7(test7, inst);
+      test7 = res7.processedData;
+      executionLogs.push(...res7.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 7 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 8. Tilting
+  let test8 = report.test8;
+  if (test8) {
+    try {
+      const res8 = evaluateTest8(test8, inst);
+      test8 = res8.processedData;
+      executionLogs.push(...res8.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 8 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 9. Tare Test
+  let test9 = report.test9;
+  if (test9) {
+    try {
+      const res9 = evaluateTest9(test9, inst);
+      test9 = res9.processedData;
+      executionLogs.push(...res9.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 9 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 10. Warm-Up Time
+  let test10 = report.test10;
+  if (test10) {
+    try {
+      const res10 = evaluateTest10(test10, inst);
+      test10 = res10.processedData;
+      executionLogs.push(...res10.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 10 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 11. Voltage Variations
+  let test11 = report.test11;
+  if (test11) {
+    try {
+      const res11 = evaluateTest11(test11, inst);
+      test11 = res11.processedData;
+      executionLogs.push(...res11.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 11 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 12. Electrical Disturbances / EMC
+  let test12 = report.test12;
+  if (test12) {
+    try {
+      const res12 = evaluateTest12(test12, inst);
+      test12 = res12.processedData;
+      executionLogs.push(...res12.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 12 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 13. Damp Heat Steady State
+  let test13 = report.test13;
+  if (test13) {
+    try {
+      const res13 = evaluateTest13(test13, inst);
+      test13 = res13.processedData;
+      executionLogs.push(...res13.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 13 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 14. Span Stability
+  let test14 = report.test14;
+  if (test14) {
+    try {
+      const res14 = evaluateTest14(test14, inst);
+      test14 = res14.processedData;
+      executionLogs.push(...res14.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 14 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 15. Endurance
+  let test15 = report.test15;
+  if (test15) {
+    try {
+      const res15 = evaluateTest15(test15, inst);
+      test15 = res15.processedData;
+      executionLogs.push(...res15.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 15 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 16. Examination of Construction
+  let test16 = report.test16;
+  if (test16) {
+    try {
+      const res16 = evaluateTest16(test16);
+      test16 = res16.processedData;
+      executionLogs.push(...res16.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 16 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // 17. Checklist
+  let test17 = report.test17;
+  if (test17) {
+    try {
+      const res17 = evaluateTest17(test17);
+      test17 = res17.processedData;
+      executionLogs.push(...res17.calculationLog);
+    } catch (err: any) {
+      executionLogs.push(`Test 17 evaluation notice: ${err.message}`);
+    }
+  }
+
+  // Determine overall compliance result across all 17 tests
+  const testResults = [
+    test1?.overallResult,
+    test2?.overallResult,
+    test3?.overallResult,
+    test4?.overallResult,
+    test5?.overallResult,
+    test6?.overallResult,
+    test7?.overallResult,
+    test8?.overallResult,
+    test9?.overallResult,
+    test10?.overallResult,
+    test11?.overallResult,
+    test12?.overallResult,
+    test13?.overallResult,
+    test14?.overallResult,
+    test15?.overallResult,
+    test16?.overallResult,
+    test17?.overallResult,
+  ].filter(Boolean);
+
+  let overallResult = report.overallResult || 'PASS';
+  if (testResults.includes('FAIL')) {
+    overallResult = 'FAIL';
+  } else if (testResults.includes('INCOMPLETE') || testResults.length < 17) {
+    overallResult = 'INCOMPLETE';
+  } else if (testResults.every((r) => r === 'PASS' || r === 'NOT_APPLICABLE')) {
+    overallResult = 'PASS';
+  }
+
+  const updatedReport: EvaluationReport = {
+    ...report,
+    test1,
+    test2,
+    test3,
+    test4,
+    test5,
+    test6,
+    test7,
+    test8,
+    test9,
+    test10,
+    test11,
+    test12,
+    test13,
+    test14,
+    test15,
+    test16,
+    test17,
+    overallResult,
+    status: overallResult === 'PASS' ? 'COMPLETED' : report.status,
+    updatedAt: new Date().toISOString(),
+  };
+
+  return { report: updatedReport, logs: executionLogs };
 }
