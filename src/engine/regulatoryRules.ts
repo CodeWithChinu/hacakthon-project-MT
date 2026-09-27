@@ -1,0 +1,223 @@
+/**
+ * Regulatory Rules and OIML R76 Standards Architecture
+ * Supports rule versioning, reproducible historical evaluation reports, and comprehensive checklist items.
+ */
+
+import { ChecklistItem, RegulatoryRuleVersion } from '../types/metrology';
+
+export const STANDARD_RULE_VERSIONS: RegulatoryRuleVersion[] = [
+  {
+    id: 'rule-oiml-r76-2006',
+    name: 'OIML R 76-1:2006 (E) / R 76-2:2007 (E)',
+    code: 'R76:2006',
+    version: '2006 Edition (with 2007 Pattern Evaluation Report)',
+    effectiveDate: '2007-01-01',
+    status: 'ACTIVE',
+    description: 'International Recommendation for Non-automatic weighing instruments - Metrological and technical requirements, Tests, and Pattern evaluation report.',
+    mpeTableVersion: 'Table 6 (Pattern Evaluation)',
+    createdAt: '2024-01-01T00:00:00Z',
+  },
+  {
+    id: 'rule-oiml-r76-1992',
+    name: 'OIML R 76-1:1992 (E) / R 76-2:1993 (E)',
+    code: 'R76:1992-A1',
+    version: '1992 Edition with Amendment 1 (1995)',
+    effectiveDate: '1993-01-01',
+    status: 'SUPERSEDED',
+    description: 'Historical OIML recommendation for pattern evaluation reports.',
+    mpeTableVersion: 'Table 6 (1992 Edition)',
+    createdAt: '2020-01-01T00:00:00Z',
+  },
+];
+
+export function getDefaultChecklistItems(): ChecklistItem[] {
+  return [
+    // 17.1 All types of weighing instruments
+    {
+      id: 'chk-7.1.1',
+      clause: '7.1.1',
+      category: 'ALL_TYPES',
+      requirement: 'Compulsory markings: Manufacturer name/mark, Accuracy class, Max, Min, and e.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'All compulsory descriptive markings present on rating plate.',
+    },
+    {
+      id: 'chk-7.1.2',
+      clause: '7.1.2',
+      category: 'ALL_TYPES',
+      requirement: 'Compulsory if applicable: Serial number, scale interval d (if d < e), max subtractive tare T, pattern approval mark.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Serial number and approval mark properly inscribed.',
+    },
+    {
+      id: 'chk-7.1.4',
+      clause: '7.1.4',
+      category: 'ALL_TYPES',
+      requirement: 'Presentation of markings: Indelible, easily readable, grouped in clearly visible place near display, protected by control mark.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Rating plate is tamper-evident and adjacent to primary display.',
+    },
+    {
+      id: 'chk-7.2.1',
+      clause: '7.2.1 / 7.2.2',
+      category: 'ALL_TYPES',
+      requirement: 'Verification marks and sealing: Secure space (≥ 200 mm² stamp or Ø ≥ 25 mm adhesive) ensuring conservation of verification mark without removal.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Sealing wire and lead seal protect calibration switch.',
+    },
+    {
+      id: 'chk-4.1.2.4',
+      clause: '4.1.2.4',
+      category: 'ALL_TYPES',
+      requirement: 'Securing/sealing: External influence on metrological parameters impossible after sealing (hardware jumper or audit trail event counter).',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Hardware security jumper sealed; audit trail event logger active.',
+    },
+    {
+      id: 'chk-8.2.1',
+      clause: '8.2.1 / 5.3.6.1',
+      category: 'ALL_TYPES',
+      requirement: 'Documentation: Manufacturer declaration, module specs, component schematic, functional description, and battery voltage limits.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Complete pattern documentation and schematics submitted and reviewed.',
+    },
+    {
+      id: 'chk-4.2.1',
+      clause: '4.2.1 / 4.3.1',
+      category: 'ALL_TYPES',
+      requirement: 'Indicating device reading: Reliable, easy, unambiguous, with appropriate size, shape, and clarity.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'High-contrast backlit LCD with 14 mm digit height.',
+    },
+    {
+      id: 'chk-4.2.2.1',
+      clause: '4.2.2.1',
+      category: 'ALL_TYPES',
+      requirement: 'Scale interval in the form 1x10^k, 2x10^k, or 5x10^k units of mass. Same interval across display and printing.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Verification interval e complies with 1x10^k requirement.',
+    },
+    {
+      id: 'chk-4.2.3',
+      clause: '4.2.3',
+      category: 'ALL_TYPES',
+      requirement: 'Limits of indication: Prevention of indication above Max + 9e.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Overload blanking activates precisely at Max + 9e.',
+    },
+    {
+      id: 'chk-4.5.1',
+      clause: '4.5.1 / 4.5.2',
+      category: 'ALL_TYPES',
+      requirement: 'Zero-setting effect and accuracy: Zero setting does not alter Max; zero deviation ≤ ±0.25e.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Zero-setting verified to ±0.25e without shifting range boundaries.',
+    },
+    {
+      id: 'chk-4.5.7',
+      clause: '4.5.7',
+      category: 'ALL_TYPES',
+      requirement: 'Zero-tracking device: Operates only at zero or negative net, equilibrium stable, correction rate ≤ 0.5 d/s.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Correction rate measured at 0.3 d/s under stable equilibrium.',
+    },
+    {
+      id: 'chk-4.6.3',
+      clause: '4.6.3 / 4.6.5',
+      category: 'ALL_TYPES',
+      requirement: 'Tare device accuracy and visibility: Tare accuracy better than ±0.25e; NET symbol clearly displayed.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Tare operation verified with net indicator and tare deduction accuracy.',
+    },
+
+    // 17.2 Direct sales to the public & price computing
+    {
+      id: 'chk-4.14.6',
+      clause: '4.14.6',
+      category: 'DIRECT_SALES',
+      requirement: 'Primary indications (weight, unit price, price to pay) visible to both vendor and customer.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Dual-sided pole display verified with identical customer and vendor readings.',
+    },
+    {
+      id: 'chk-4.14.2',
+      clause: '4.14.2',
+      category: 'DIRECT_SALES',
+      requirement: 'Non-automatic zero-setting operable with tool only on direct sales instruments.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'No manual screwdriver zero-pot accessible from exterior.',
+    },
+    {
+      id: 'chk-4.15.3',
+      clause: '4.15.3',
+      category: 'DIRECT_SALES',
+      requirement: 'Price computing calculation: Price to pay = Weight x Unit price, rounded to nearest monetary division.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Exact price multiplication verified against metrological test cases.',
+    },
+
+    // 17.3 Electronic weighing instruments
+    {
+      id: 'chk-5.1.1',
+      clause: '5.1.1 / 5.2',
+      category: 'ELECTRONIC',
+      requirement: 'Acting upon significant faults: Instrument made automatically inoperative or visual/audible alarm until fault removed.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Display blanks and sounds buzzer upon simulated ADC failure.',
+    },
+    {
+      id: 'chk-5.3.1',
+      clause: '5.3.1',
+      category: 'ELECTRONIC',
+      requirement: 'Power-on display test: All segments active and non-active long enough for operator verification upon power-up.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Full segment test executes for 2.5 seconds on switch-on.',
+    },
+    {
+      id: 'chk-5.3.6',
+      clause: '5.3.6',
+      category: 'ELECTRONIC',
+      requirement: 'Peripheral interface protection: Metrologically relevant parameters and primary indications protected against alteration via RS-232 / USB.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Commands over interface cannot manipulate tare, span, or raw mass readings.',
+    },
+    {
+      id: 'chk-5.3.7',
+      clause: '5.3.7',
+      category: 'ELECTRONIC',
+      requirement: 'Battery voltage drop: When battery drops below manufacturer lower limit (UMO), instrument either continues accurate weighing or displays no weight.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Instrument halts weighing and displays "BAT-LOW" precisely at UMO (4.8 V).',
+    },
+
+    // Software & Legally Relevant Digital Devices
+    {
+      id: 'chk-soft-id',
+      clause: '5.5.1 / 5.5.2',
+      category: 'SOFTWARE',
+      requirement: 'Software identification: Legally relevant software identified by version number and cryptographic checksum accessible on display.',
+      applicable: true,
+      status: 'PASS',
+      remarks: 'Firmware Version v2.14, SHA-256 Checksum: 8F2A...9C displayed during boot.',
+    },
+  ];
+}

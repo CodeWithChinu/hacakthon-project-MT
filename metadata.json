@@ -1,0 +1,6 @@
+{
+  "name": "SIH NAWI OIML R76 Legal Metrology Evaluation System",
+  "description": "Laboratory-grade pattern evaluation and test reporting software for Non-Automatic Weighing Instruments according to OIML R 76-1 and R 76-2.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
